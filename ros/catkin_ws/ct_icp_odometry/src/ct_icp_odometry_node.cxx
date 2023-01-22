@@ -1,5 +1,6 @@
 #include <mutex>
 #include <thread>
+#include <fstream>
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -43,6 +44,7 @@ std::unique_ptr<ct_icp::Odometry> odometry_ptr = nullptr;
 std::atomic<double> previous_timestamp;
 std::atomic<bool> is_initialized = false;
 bool debug_print = false;
+std::shared_ptr<std::ofstream> posesFile = nullptr;
 
 slam::frame_id_t frame_id = 0;
 std::mutex registration_mutex;
@@ -246,10 +248,21 @@ void RegisterNewFrameCallback(const sensor_msgs::PointCloud2Ptr &pc_ptr) {
         ros::shutdown();
     }
 
+    const nav_msgs::Odometry pose_msg = ct_icp::SlamPoseToROSOdometry(summary.frame.end_pose.pose, stamp);
+    {
+        // write to file:
+        if ( ! posesFile ) posesFile = std::make_shared<std::ofstream>("./ct_icp_after_map_poses.txt");
+        if( posesFile && posesFile->is_open() )
+        {
+             (*posesFile) << (stamp.toNSec()) << " " << pose_msg.pose.pose.position.x << " " << pose_msg.pose.pose.position.y << " " << pose_msg.pose.pose.position.z
+                          << " " << pose_msg.pose.pose.orientation.x << " " << pose_msg.pose.pose.orientation.y << " " << pose_msg.pose.pose.orientation.z << " " << pose_msg.pose.pose.orientation.w << std::endl;
+        }
+    }
     // -- PUBLISH RESULTS
     publishers[ODOM_POSE].
-            publish(ct_icp::SlamPoseToROSOdometry(summary.frame.end_pose.pose, stamp)
+            publish(pose_msg
     );
+
     if (!summary.corrected_points.
             empty()
             )
@@ -266,7 +279,7 @@ void RegisterNewFrameCallback(const sensor_msgs::PointCloud2Ptr &pc_ptr) {
             sendTransform(ct_icp::TransformFromPose(summary.frame.begin_pose.pose, stamp)
     );
 
-// -- PUBLISH Logging values
+    // -- PUBLISH Logging values
     auto &logger = publishers[LOG_MONITOR];
 
     auto log_value = [&logger](const std::string &key, double value) {
