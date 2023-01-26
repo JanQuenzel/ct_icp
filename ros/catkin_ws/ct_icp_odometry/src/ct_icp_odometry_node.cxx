@@ -251,7 +251,7 @@ void RegisterNewFrameCallback(const sensor_msgs::PointCloud2Ptr &pc_ptr) {
     const nav_msgs::Odometry pose_msg = ct_icp::SlamPoseToROSOdometry(summary.frame.end_pose.pose, stamp);
     {
         // write to file:
-        if ( ! posesFile ) posesFile = std::make_shared<std::ofstream>("./ct_icp_after_map_poses.txt");
+        if ( ! posesFile ) posesFile = std::make_shared<std::ofstream>("./ct_icp_odometry_after_map_poses.txt");
         if( posesFile && posesFile->is_open() )
         {
              (*posesFile) << (stamp.toNSec()) << " " << pose_msg.pose.pose.position.x << " " << pose_msg.pose.pose.position.y << " " << pose_msg.pose.pose.position.z
@@ -259,25 +259,18 @@ void RegisterNewFrameCallback(const sensor_msgs::PointCloud2Ptr &pc_ptr) {
         }
     }
     // -- PUBLISH RESULTS
-    publishers[ODOM_POSE].
-            publish(pose_msg
-    );
+    if ( publishers[ODOM_POSE].getNumSubscribers() > 0 )
+       publishers[ODOM_POSE].publish(pose_msg);
 
-    if (!summary.corrected_points.
-            empty()
-            )
-        ct_icp::PublishPoints(publishers[WORLD_POINTS], summary
-                .corrected_points, ct_icp::main_frame_id, stamp);
+    if ( publishers[WORLD_POINTS].getNumSubscribers() > 0 )
+        if (!summary.corrected_points.empty())
+            ct_icp::PublishPoints(publishers[WORLD_POINTS], summary.corrected_points, ct_icp::main_frame_id, stamp);
 
-    if (!summary.keypoints.
-            empty()
-            )
-        ct_icp::PublishPoints(publishers[KEY_POINTS], summary
-                .keypoints, ct_icp::main_frame_id, stamp);
+    if ( publishers[KEY_POINTS].getNumSubscribers() > 0 )
+        if (!summary.keypoints.empty())
+            ct_icp::PublishPoints(publishers[KEY_POINTS], summary.keypoints, ct_icp::main_frame_id, stamp);
 
-    tfBroadcasterPtr->
-            sendTransform(ct_icp::TransformFromPose(summary.frame.begin_pose.pose, stamp)
-    );
+    tfBroadcasterPtr->sendTransform(ct_icp::TransformFromPose(summary.frame.begin_pose.pose, stamp));
 
     // -- PUBLISH Logging values
     auto &logger = publishers[LOG_MONITOR];
@@ -360,7 +353,7 @@ int main(int argc, char **argv) {
     ros::NodeHandle public_nh;
     InitializeNode(public_nh, private_nh);
     // Add a point cloud subscriber
-    ros::Subscriber pointcloud_subscriber = public_nh.subscribe("/ct_icp/pointcloud", 200,
+    ros::Subscriber pointcloud_subscriber = public_nh.subscribe("/ct_icp/pointcloud", 2,
                                                                 &RegisterNewFrameCallback);
     ros::spin();
     return 0;
